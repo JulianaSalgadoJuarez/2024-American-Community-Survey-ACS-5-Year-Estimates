@@ -1,0 +1,237 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+# Library
+```{r library}
+
+library(jsonlite)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(sf)
+library(tigris)
+library(leaflet)
+```
+
+
+## Data cleaning (EDA)
+```{r eda}
+
+
+api_key = ["*ADD YOUR API HERE*"]
+
+url <- paste0(
+  "https://api.census.gov/data/2024/acs/acs5?",
+  "get=NAME,B01003_001E,B19013_001E,B25077_001E,B25064_001E,B25001_001E",
+  "&for=county:*&in=state:*",
+  "&key=", api_key
+)
+
+
+data <- fromJSON(url)
+data <- as.data.frame(data[-1, , drop = FALSE])
+
+
+# Region mappings using 2-digit stat_num
+northeast_fips <- c("09", "23", "25", "33", "34", "36", "42", "44", "50")
+midwest_fips   <- c("17", "18", "19", "20", "26", "27", "29", "31", "38", "39", "46", "55")
+south_fips     <- c("01", "05", "10", "11", "12", "13", "21", "22", "24", "28", "37", "40", "45", "47", "48", "51", "54")
+west_fips      <- c("02", "04", "06", "08", "15", "16", "30", "32", "35", "41", "49", "53", "56")
+
+
+
+# Rename columns
+names(data) <- c(
+  "County", "Population", "Median_Household_Income",
+  "Median_Home_Value", "Median_Gross_Rent",
+  "Housing_Units", "State_num", "County_Code"
+)
+
+# Convert columns to numbers
+numeric_cols <- c(
+  "Population", "Median_Household_Income",
+  "Median_Home_Value", "Median_Gross_Rent", "Housing_Units"
+)
+
+data <- data %>%
+  # Convert and clean geographical strings
+  mutate(
+    across(all_of(numeric_cols), as.numeric),
+    State_num   = str_pad(State_num, 2, pad = "0"),
+    County_Code = str_pad(County_Code, 3, pad = "0"),
+    State_name  = str_trim(sub(".*, ", "", County)),
+    GEOID       = paste0(State_num, County_Code),
+    
+    # Categorize by  region
+    Region = case_when(
+      State_num %in% northeast_fips ~ "Northeast",
+      State_num %in% midwest_fips   ~ "Midwest",
+      State_num %in% south_fips     ~ "South",
+      State_num %in% west_fips      ~ "West",
+      TRUE                          ~ "Other/Unknown"
+    )
+  ) %>%
+  # Replace negative values with NA 
+  mutate(
+    across(all_of(numeric_cols), ~ if_else(.x < 0, NA_real_, .x))
+  )
+
+# 50 states and Washington, D.C.
+valid_states <- setdiff(sprintf("%02d", 1:56), c("03", "07", "14", "43", "52"))
+
+data <- data %>% 
+  filter(State_num %in% valid_states)
+
+
+# Check the data
+head(data)
+print("data diminsions")
+dim(data)
+print("na sum")
+sum(is.na(data))
+```
+
+```{r graph mhi_v_mhv}
+
+ggplot(data, aes(x = Median_Household_Income, y = Median_Home_Value, color = Region)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Household Income vs. Home Value",
+    x = "Median Household Income ($)",
+    y = "Median Home Value ($)"
+  ) +
+  theme_gray()
+
+```
+
+
+## Graphs
+```{r graph mhi_v_p}
+
+ggplot(data, aes(x = Median_Household_Income, y = Population, color = Region)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Household Income vs. Home Value",
+    x = "Median Household Income ($)",
+    y = "Median Home Value ($)"
+  ) +
+  theme_gray()
+
+```
+
+```{r graph mgr_v_mhv}
+
+ggplot(data, aes(x = Median_Gross_Rent, y = Median_Home_Value, color = Region)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Household Income vs. Home Value",
+    x = "Median Household Income ($)",
+    y = "Median Home Value ($)"
+  ) +
+  theme_gray()
+
+```
+
+```{r graph mhi_v_p}
+
+ggplot(data, aes(x = Median_Household_Income, y = Population, color = Region)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Household Income vs. Home Value",
+    x = "Median Household Income ($)",
+    y = "Median Home Value ($)"
+  ) +
+  theme_gray()
+
+```
+
+
+# Maps
+```{r map_setup}
+
+options(tigris_use_cache = TRUE)
+
+valid_states <- c(
+  sprintf("%02d", 1:2),
+  sprintf("%02d", 4:6),
+  sprintf("%02d", 8:13),
+  sprintf("%02d", 15:42),
+  sprintf("%02d", 44:51),
+  sprintf("%02d", 53:56)
+)
+
+counties <- tigris::counties(cb = TRUE, year = 2024) %>%
+  filter(STATEFP %in% valid_states) %>%
+  select(GEOID, geometry)
+
+map_data <- left_join(counties, data, by = "GEOID")
+
+
+```
+
+```{r zoom}
+make_static_map <- function(variable, title, legend_title) {
+  ggplot(map_data) +
+    geom_sf(
+      aes(fill = .data[[variable]]),
+      color = NA
+    ) +
+    scale_fill_viridis_c(
+      name = legend_title,
+      labels = scales::label_comma(),
+      na.value = "gray90"
+    ) +
+    coord_sf(
+      xlim = c(-180, -65),
+      ylim = c(15, 73),
+      expand = FALSE
+    ) +
+    labs(title = title) +
+    theme_void() +
+    theme(
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.title = element_text(size = 16, face = "bold")
+    )
+}
+```
+
+
+```{r Population}
+
+make_static_map("Population", "Population by County", "Population")
+```
+
+
+```{r Median_Household_Income}
+make_static_map("Median_Household_Income","Median Household Income by County", "Income ($)")
+```
+
+
+```{r Median_Home_Value}
+make_static_map("Median_Home_Value", "Median Home Value by County", "Home Value ($)")
+```
+
+
+```{r Median_Gross_Rent}
+make_static_map("Median_Gross_Rent", "Median Monthly Rent by County", "Rent ($)")
+```
+
+
+```{r Housing_Units}
+make_static_map("Housing_Units","Housing Units by County", "Housing Units")
+```
+
+
+
+
+
+
