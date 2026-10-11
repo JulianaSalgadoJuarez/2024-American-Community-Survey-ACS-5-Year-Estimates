@@ -1,8 +1,6 @@
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 ## R Markdown
 
 # Library
@@ -15,6 +13,7 @@ library(ggplot2)
 library(sf)
 library(tigris)
 library(leaflet)
+
 ```
 
 
@@ -95,6 +94,8 @@ print("na sum")
 sum(is.na(data))
 ```
 
+
+## Graphs
 ```{r graph mhi_v_mhv}
 
 ggplot(data, aes(x = Median_Household_Income, y = Median_Home_Value, color = Region)) +
@@ -109,17 +110,15 @@ ggplot(data, aes(x = Median_Household_Income, y = Median_Home_Value, color = Reg
 
 ```
 
-
-## Graphs
 ```{r graph mhi_v_p}
 
 ggplot(data, aes(x = Median_Household_Income, y = Population, color = Region)) +
   geom_point(alpha = 0.4) +
   geom_smooth(method = "lm", se = FALSE) +
   labs(
-    title = "Household Income vs. Home Value",
+    title = "Household Income vs. Population",
     x = "Median Household Income ($)",
-    y = "Median Home Value ($)"
+    y = "Population"
   ) +
   theme_gray()
 
@@ -131,27 +130,29 @@ ggplot(data, aes(x = Median_Gross_Rent, y = Median_Home_Value, color = Region)) 
   geom_point(alpha = 0.4) +
   geom_smooth(method = "lm", se = FALSE) +
   labs(
-    title = "Household Income vs. Home Value",
-    x = "Median Household Income ($)",
+    title = "Gross Rent vs. Home Value",
+    x = "Median Gross Rent ($)",
     y = "Median Home Value ($)"
   ) +
   theme_gray()
 
 ```
 
-```{r graph mhi_v_p}
+```{r graph mhi_v_mgr}
 
-ggplot(data, aes(x = Median_Household_Income, y = Population, color = Region)) +
+ggplot(data, aes(x = Median_Household_Income, y = Median_Gross_Rent, color = Region)) +
   geom_point(alpha = 0.4) +
   geom_smooth(method = "lm", se = FALSE) +
   labs(
-    title = "Household Income vs. Home Value",
+    title = "Household Income vs. Gross Rent",
     x = "Median Household Income ($)",
-    y = "Median Home Value ($)"
+    y = "Median Gross Rent ($)"
   ) +
   theme_gray()
 
 ```
+
+
 
 
 # Maps
